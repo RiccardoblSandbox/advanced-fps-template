@@ -107,8 +107,8 @@ public class BasicCharacterMovementState extends BaseAppState implements ActionL
 
     float forwardSpeed = 2.6f;
     float sideSpeed = 2.4f;
-    float walkSpeed = 1.0f;
-    float runSpeed = 3.0f;
+    float walkSpeed = 5.0f;
+    float runSpeed = 8.0f;
 
     @Override
     public void update(float tpf) {
@@ -135,7 +135,7 @@ public class BasicCharacterMovementState extends BaseAppState implements ActionL
             walkDirection.addLocal(camDir.negate());
         }
 
-        characterControl.setWalkDirection(walkDirection);
+        if(characterControl.isOnGround())characterControl.setWalkDirection(walkDirection);
     }
 
     @Override

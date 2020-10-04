@@ -1,0 +1,13 @@
+*.blend1
+*.f3b
+*.f3h
+.vscode
+.gradle
+gradle
+build
+bin
+*.so
+*.dll
+.classpath
+.project
+.settings

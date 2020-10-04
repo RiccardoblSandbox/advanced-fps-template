@@ -7,17 +7,29 @@ version '1.0.0'
 
 repositories {
     jcenter()
+        mavenCentral()
+maven { url "https://dl.bintray.com/jmephonon/jmePhonon" }
+			maven { url 'https://jitpack.io' }
+            	maven{ url "http://dl.bintray.com/riccardo/f3b" }
+    maven{ url "http://dl.bintray.com/riccardo/v-hacd" }
+      maven {
+            url "http://dl.bintray.com/riccardo/jme3-bullet-native"
+        }
 }
+
 
 project.ext {
     jmeVer = "3.3.2-stable"
 }
-
+def g_f3b="com.github.f3b"
+def v_f3b="8b369655a39982b44e160cc7d7ca3539aa635e84"
 dependencies {
-
+    implementation(group: 'com.jme3.phonon', name: 'jmePhonon', version: '0.3.4', ext: 'jar', classifier: '')
+    implementation ("${g_f3b}:jme3_f3b:${v_f3b}")
     implementation "org.jmonkeyengine:jme3-core:$jmeVer"
     implementation "org.jmonkeyengine:jme3-desktop:$jmeVer"
     implementation "org.jmonkeyengine:jme3-effects:$jmeVer"
+    implementation "org.jmonkeyengine:jme3-plugins:$jmeVer"
 
     // choose lwjgl 2 or 3
     implementation "org.jmonkeyengine:jme3-lwjgl:$jmeVer"
