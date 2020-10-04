@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.function.Supplier;
 
+import com.jme.effekseer.EffekseerEmitterControl;
 import com.jme3.anim.AnimClip;
 import com.jme3.anim.AnimComposer;
 import com.jme3.anim.AnimTrack;
@@ -21,6 +22,9 @@ import com.jme3.animation.AnimControl;
 import com.jme3.animation.LoopMode;
 import com.jme3.animation.Track;
 import com.jme3.asset.AssetManager;
+import com.jme3.bounding.BoundingBox;
+import com.jme3.bullet.BulletAppState;
+import com.jme3.bullet.collision.shapes.SphereCollisionShape;
 import com.jme3.bullet.control.BetterCharacterControl;
 import com.jme3.bullet.control.RigidBodyControl;
 import com.jme3.math.FastMath;
@@ -39,24 +43,79 @@ import com.jme3.scene.control.Control;
 public class Jesse extends Node{
 
     private Node jesse;
-
+    private Mode mode;
     float fpsAngles[]=new float[3];
 
-    public Node getJesse() {
-        return jesse;
+    public Node getFPSNode() {
+        return mode==Mode.FirstPerson?jesse:new Node();
     }
 
-
-    public Jesse(AssetManager assetManager,boolean fpsMode){
-
-        jesse=(Node)assetManager.loadModel("fpstemplate/Jesse.gltf");
-
-        PositionalSoundEmitterControl footsteps=new PositionalSoundEmitterControl(assetManager,"fpstemplate/metalwalk1.f32le");
-        footsteps.setVolume(4f);
-        addControl(footsteps);
+    public Spatial shot(AssetManager assetManager,Vector3f direction){
+        Vector3f pos=getCameraPosition(false);
+        // pos=pos.add(direction.mult(1));
         
+        Node bullet=new Node("bullet");
+        bullet.setLocalTranslation(pos);
+        SphereCollisionShape shape=new SphereCollisionShape(0.1f);
+        RigidBodyControl rb=new RigidBodyControl(shape,1f);
+        bullet.addControl(rb);
+
+        // rb.setPhysicsLocation(pos);
+
+        rb.setLinearVelocity(direction.mult(100f));
+        plasmaSound.playInstance();
+
+
+        // EffekseerEmitterControl effekt=(EffekseerEmitterControl)assetManager.loadAsset("fpstemplate/effekts/bullet/bullet.efkefc");
+        // bullet.addControl(effekt);
+        return bullet;
+
+    }
+    PositionalSoundEmitterControl plasmaSound;
+
+    public static enum Mode{
+        FirstPerson,
+        ThirdPerson
+    }
+    public Jesse(AssetManager assetManager,Mode mode){
+        this.mode=mode;
+        jesse=new Node("Jesse");
+
+        Spatial jj=assetManager.loadModel("fpstemplate/Jesse.gltf");
+        jj.setLocalScale(0.4f);
+
+        BoundingBox bbox=(BoundingBox)jj.getWorldBound();
+        jesse.attachChild(jj);
+        jj.setLocalTranslation(0,bbox.getYExtent(),0);
+
+        if(mode==Mode.FirstPerson||mode==Mode.ThirdPerson){
+            BetterCharacterControl characterControl = new BetterCharacterControl(bbox.getXExtent(), bbox.getYExtent()*2, 50f);
+            characterControl.setJumpForce(new Vector3f(0, 600, 0));
+            addControl(characterControl);
+        }
+
+        if(mode==Mode.FirstPerson){            
+            Spatial sp=jesse.clone();
+            sp.setCullHint(CullHint.Always);
+            attachChild(sp);
+            jesse.getChild("body").setCullHint(CullHint.Always);       
+        }else{
+            attachChild(jesse);
+        }
+
+        PositionalSoundEmitterControl footsteps=new PositionalSoundEmitterControl(assetManager,"fpstemplate/walk.f32le");
+        addControl(footsteps);
+        footsteps.setVolume(0.5f);
+        
+        PositionalSoundEmitterControl jumpSound=new PositionalSoundEmitterControl(assetManager,"fpstemplate/jump.f32le");
+        addControl(jumpSound);
+
+         plasmaSound=new PositionalSoundEmitterControl(assetManager,"fpstemplate/plasma.f32le");
+        addControl(plasmaSound);
+       
         addControl(new AbstractControl(){
             float t=0;
+            boolean wasOnGround=true;
             @Override
             protected void controlUpdate(float tpf) {
                 boolean walking=false;
@@ -64,6 +123,10 @@ public class Jesse extends Node{
                 
                 if(bc!=null){
                     walking=(bc.isOnGround()&&bc.getRigidBody().getLinearVelocity().length()>0.1);
+                    if(!bc.isOnGround()&&wasOnGround){
+                        jumpSound.playInstance();
+                    }
+                    wasOnGround=bc.isOnGround();
                 }
 
                 if(walking){
@@ -79,7 +142,6 @@ public class Jesse extends Node{
             protected void controlRender(RenderManager rm, ViewPort vp) {}            
         });
 
-        if(!fpsMode)attachChild(jesse);
 
 
         Collection<AnimComposer> animComposers=new ArrayList<AnimComposer>();
@@ -91,14 +153,7 @@ public class Jesse extends Node{
         });
         
 
-        if(fpsMode){
-            jesse.getChild("body").setCullHint(CullHint.Always);
 
-            BetterCharacterControl characterControl = new BetterCharacterControl(0.5f, 2, 50f);
-            characterControl.setJumpForce(new Vector3f(0, 600, 0));
-            addControl(characterControl);
-
-        }
 
         animComposers.forEach(c->{
                 SkinningControl skin=c.getSpatial().getControl(SkinningControl.class);
@@ -159,7 +214,20 @@ public class Jesse extends Node{
         // fpsCam.setRotation(scam.getWorldRotation());         
     }
 
-    public void updateFPSCamera(Camera sceneCamera, Camera fpsCam) {
+
+    public Vector3f getCameraPosition(boolean fps){
+        Spatial scam=fps?jesse.getChild("camera"):getChild("camera");
+        return scam.getWorldTranslation();
+    }
+
+    public Vector3f getCameraDirection(boolean fps){
+        Vector3f pos=getCameraPosition(fps);
+        Spatial lookAtS=fps?jesse.getChild("camera_Orientation"):getChild("camera_Orientation");
+        return lookAtS.getWorldTranslation().subtract(pos);    
+    }
+    
+
+    public void updateCamera(Camera sceneCamera, Camera fpsCam) {
         // this.depthFirstTraversal(sx -> {
         //     System.out.println(sx);
         // });
@@ -192,7 +260,15 @@ public class Jesse extends Node{
         fovy=FastMath.ceil(fovy * 180.0F / FastMath.PI);
         fpsCam.setFrustumPerspective(fovy,(float)fpsCam.getWidth() / (float)fpsCam.getHeight(),0.01f,100f);
 
-        // fpsCam.setRotation(scam.getWorldRotation());         
+        // fpsCam.setRotation(scam.getWorldRotation());     
+        
+        
+        if(mode==Mode.FirstPerson){
+            sceneCamera.setLocation(getCameraPosition(false));
+        }else{
+            sceneCamera.setLocation(getCameraPosition(false).add(sceneCamera.getDirection().mult(-10)));
+
+        }
 
     }
     

@@ -1,5 +1,6 @@
 package com.mygame;
 
+import com.jme.effekseer.EffekseerRenderer;
 import com.jme3.app.DebugKeysAppState;
 import com.jme3.app.SimpleApplication;
 import com.jme3.app.StatsAppState;
@@ -34,6 +35,7 @@ import com.jme3.scene.Spatial;
 import com.jme3.scene.Spatial.CullHint;
 import com.jme3.scene.shape.Sphere;
 import com.jme3.system.AppSettings;
+import com.mygame.Jesse.Mode;
 
 import wf.frk.f3b.jme3.F3bLoader;
 
@@ -83,15 +85,21 @@ public class Main extends SimpleApplication implements ActionListener {
         }catch(Exception e){
             throw new RuntimeException("Can't load audio engine",e);
         }
+
+
+      
+
+        EffekseerRenderer effekseerRenderer=EffekseerRenderer.addToViewPort(viewPort, assetManager,settings.isGammaCorrection());
+        effekseerRenderer.setAsync(1);
+
         fpsCam=cam.clone();
         ViewPort fpsView=renderManager.createMainView("FPSView", fpsCam);
 
         fpsRoot=new Node("FPSRoot");
         fpsView.getScenes().add(fpsRoot);
 
-        jesse=new Jesse(assetManager, true);
-        jesse.updateFPSCamera(cam,fpsCam);
-        fpsRoot.attachChild(jesse.getJesse());
+        jesse=new Jesse(assetManager, Mode.ThirdPerson);
+        fpsRoot.attachChild(jesse.getFPSNode());
 
         // Configure the scene for PBR
         getRenderManager().setPreferredLightMode(TechniqueDef.LightMode.SinglePassAndImageBased);
@@ -99,7 +107,7 @@ public class Main extends SimpleApplication implements ActionListener {
 
         // Enable physics...
         BulletAppState bulletAppState = new BulletAppState();
-        bulletAppState.setDebugEnabled(false); // enable to visualize physics meshes
+        bulletAppState.setDebugEnabled(true); // enable to visualize physics meshes
         stateManager.attach(bulletAppState);
         bulletAppState.getPhysicsSpace().setGravity(new Vector3f(0,-18f,0));
 
@@ -126,16 +134,16 @@ public class Main extends SimpleApplication implements ActionListener {
         rootNode.addLight(lightProbe);
 
         // Add some effects
-        sceneHelper.addEffect(
-                SceneHelper.Effect.Directional_Shadows,
-                SceneHelper.Effect.Ambient_Occlusion,
-                // SceneHelper.Effect.Bloom,
-                // SceneHelper.Effect.MipMapBloom,
-                SceneHelper.Effect.ToneMapping,
-                SceneHelper.Effect.BokehDof
-                // SceneHelper.Effect.LensFlare
-                // SceneHelper.Effect.FXAA
-        );
+        // sceneHelper.addEffect(
+        //         SceneHelper.Effect.Directional_Shadows,
+        //         SceneHelper.Effect.Ambient_Occlusion,
+        //         // SceneHelper.Effect.Bloom,
+        //         // SceneHelper.Effect.MipMapBloom,
+        //         SceneHelper.Effect.ToneMapping,
+        //         SceneHelper.Effect.BokehDof
+        //         // SceneHelper.Effect.LensFlare
+        //         // SceneHelper.Effect.FXAA
+        // );
 
         // Set our entire scene to cast and receive shadows.
         rootNode.setShadowMode(RenderQueue.ShadowMode.CastAndReceive);
@@ -201,7 +209,10 @@ public class Main extends SimpleApplication implements ActionListener {
 
     public void onAction(String binding, boolean isPressed, float tpf) {
 
-        // if (binding.equals("Shoot") && !isPressed) {
+        if (binding.equals("Shoot") && !isPressed) {
+            Spatial b=jesse.shot( assetManager,cam.getDirection());
+            stateManager.getState(BulletAppState.class).getPhysicsSpace().addAll(b);
+            rootNode.attachChild(b);
 
         //     Geometry bullet = new Geometry("Bullet", new Sphere(32, 32, 0.1f));
         //     bullet.setMaterial(bulletMaterial);
@@ -220,7 +231,7 @@ public class Main extends SimpleApplication implements ActionListener {
         //     rigidBodyControl.setPhysicsLocation(bulletLocation);
         //     rigidBodyControl.setPhysicsRotation(cam.getRotation());
         //     rigidBodyControl.applyImpulse(cam.getDirection().mult(20), new Vector3f());
-        // }
+        }
     }
 
     private float[] angles = new float[3];
@@ -230,9 +241,8 @@ public class Main extends SimpleApplication implements ActionListener {
     public void simpleUpdate(float tpf) {
         fpsRoot.updateLogicalState(tpf);
         fpsRoot.updateGeometricState();
-        jesse.updateFPSCamera(cam,fpsCam);
+        jesse.updateCamera(cam,fpsCam);
 
-        cam.setLocation(playerNode.getLocalTranslation().add(0, 2,0));
         playerNode.getControl(BetterCharacterControl.class).setViewDirection(cam.getDirection());
 
         cam.getRotation().toAngles(angles);
