@@ -18,6 +18,7 @@ import com.jme3.light.LightProbe;
 import com.jme3.material.Material;
 import com.jme3.material.TechniqueDef;
 import com.jme3.math.ColorRGBA;
+import com.jme3.math.FastMath;
 import com.jme3.math.Quaternion;
 import com.jme3.math.Vector3f;
 import com.jme3.phonon.Phonon;
@@ -86,19 +87,23 @@ public class Main extends SimpleApplication implements ActionListener {
             throw new RuntimeException("Can't load audio engine",e);
         }
 
-
       
 
-        EffekseerRenderer effekseerRenderer=EffekseerRenderer.addToViewPort(viewPort, assetManager,settings.isGammaCorrection());
-        effekseerRenderer.setAsync(1);
+        EffekseerRenderer effekseerRenderer=EffekseerRenderer.addToViewPort(stateManager,viewPort, assetManager,settings.isGammaCorrection());
+        effekseerRenderer.setSoftParticles(0.9f, 2f);
+        // effekseerRenderer.setAsync(1);
 
         fpsCam=cam.clone();
         ViewPort fpsView=renderManager.createMainView("FPSView", fpsCam);
 
+        EffekseerRenderer effekseerRenderer2=EffekseerRenderer.addToViewPort(stateManager,fpsView, assetManager,settings.isGammaCorrection());
+        effekseerRenderer2.setHardParticles();
+        // effekseerRenderer2.setAsync(1);
+
         fpsRoot=new Node("FPSRoot");
         fpsView.getScenes().add(fpsRoot);
 
-        jesse=new Jesse(assetManager, Mode.ThirdPerson);
+        jesse=new Jesse(assetManager, Mode.FirstPerson);
         fpsRoot.attachChild(jesse.getFPSNode());
 
         // Configure the scene for PBR
@@ -107,13 +112,19 @@ public class Main extends SimpleApplication implements ActionListener {
 
         // Enable physics...
         BulletAppState bulletAppState = new BulletAppState();
-        bulletAppState.setDebugEnabled(true); // enable to visualize physics meshes
+        bulletAppState.setDebugEnabled(false); // enable to visualize physics meshes
         stateManager.attach(bulletAppState);
         bulletAppState.getPhysicsSpace().setGravity(new Vector3f(0,-18f,0));
 
         // Adjust to near frustum to a very close amount.
         float aspect = (float)cam.getWidth() / (float)cam.getHeight();
-        cam.setFrustumPerspective(55, aspect, 0.01f, 1000);
+
+
+        float fov=100.6f;
+        float radfov=fov * FastMath.PI / 180.0F;
+        float fovy=(float)(2.0F * FastMath.atan(FastMath.tan(radfov / 2.0F) * (float)fpsCam.getHeight() / (float)fpsCam.getWidth()));
+        fovy=FastMath.ceil(fovy * 180.0F / FastMath.PI);
+        cam.setFrustumPerspective(fovy, aspect, 0.01f, 1000);
 
         // change the viewport background color.
         viewPort.setBackgroundColor(new ColorRGBA(0.4f, 0.5f, 0.6f, 1.0f));
@@ -210,9 +221,8 @@ public class Main extends SimpleApplication implements ActionListener {
     public void onAction(String binding, boolean isPressed, float tpf) {
 
         if (binding.equals("Shoot") && !isPressed) {
-            Spatial b=jesse.shot( assetManager,cam.getDirection());
-            stateManager.getState(BulletAppState.class).getPhysicsSpace().addAll(b);
-            rootNode.attachChild(b);
+            Spatial b=jesse.shot( assetManager,cam.getDirection(),rootNode, stateManager.getState(BulletAppState.class)  .getPhysicsSpace());
+          
 
         //     Geometry bullet = new Geometry("Bullet", new Sphere(32, 32, 0.1f));
         //     bullet.setMaterial(bulletMaterial);

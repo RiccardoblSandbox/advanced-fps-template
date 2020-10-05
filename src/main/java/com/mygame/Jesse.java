@@ -5,9 +5,12 @@ import java.util.Collection;
 import java.util.function.Supplier;
 
 import com.jme.effekseer.EffekseerEmitterControl;
+import com.jme.effekseer.driver.EffekseerEmissionDriverGeneric;
+import com.jme.effekseer.driver.fun.impl.EffekseerGenericSpawner;
 import com.jme3.anim.AnimClip;
 import com.jme3.anim.AnimComposer;
 import com.jme3.anim.AnimTrack;
+import com.jme3.anim.AnimationMask;
 import com.jme3.anim.Armature;
 import com.jme3.anim.ArmatureMask;
 import com.jme3.anim.Joint;
@@ -15,6 +18,8 @@ import com.jme3.anim.SkinningControl;
 import com.jme3.anim.TransformTrack;
 import com.jme3.anim.tween.action.Action;
 import com.jme3.anim.tween.action.BlendAction;
+import com.jme3.anim.tween.action.BlendSpace;
+import com.jme3.anim.tween.action.BlendableAction;
 import com.jme3.anim.tween.action.LinearBlendSpace;
 import com.jme3.anim.util.HasLocalTransform;
 import com.jme3.animation.AnimChannel;
@@ -24,6 +29,7 @@ import com.jme3.animation.Track;
 import com.jme3.asset.AssetManager;
 import com.jme3.bounding.BoundingBox;
 import com.jme3.bullet.BulletAppState;
+import com.jme3.bullet.PhysicsSpace;
 import com.jme3.bullet.collision.shapes.SphereCollisionShape;
 import com.jme3.bullet.control.BetterCharacterControl;
 import com.jme3.bullet.control.RigidBodyControl;
@@ -50,27 +56,43 @@ public class Jesse extends Node{
         return mode==Mode.FirstPerson?jesse:new Node();
     }
 
-    public Spatial shot(AssetManager assetManager,Vector3f direction){
+    public Spatial shot(AssetManager assetManager,Vector3f direction,Node parent,PhysicsSpace phy){
         Vector3f pos=getCameraPosition(false);
         // pos=pos.add(direction.mult(1));
         
         Node bullet=new Node("bullet");
         bullet.setLocalTranslation(pos);
+        parent.attachChild(bullet);
+
         SphereCollisionShape shape=new SphereCollisionShape(0.1f);
-        RigidBodyControl rb=new RigidBodyControl(shape,1f);
+        RigidBodyControl rb=new RigidBodyControl(shape,0.1f);
         bullet.addControl(rb);
+        phy.add(rb);
+        rb.setGravity(Vector3f.ZERO);
 
         // rb.setPhysicsLocation(pos);
 
-        rb.setLinearVelocity(direction.mult(100f));
+        rb.setLinearVelocity(direction.mult(10f));
         plasmaSound.playInstance();
 
 
-        // EffekseerEmitterControl effekt=(EffekseerEmitterControl)assetManager.loadAsset("fpstemplate/effekts/bullet/bullet.efkefc");
-        // bullet.addControl(effekt);
+        EffekseerEmitterControl effekt=new EffekseerEmitterControl(assetManager,"fpstemplate/effekts/bullet/bullet.efkefc");
+        bullet.addControl(effekt);
+        bullet.addControl(new ExplosionControl(assetManager,(x)->x!=jesse.getControl(RigidBodyControl.class)));
+
+
+        Spatial target=jesse.getChild("gunTip");
+        EffekseerEmitterControl flash=new EffekseerEmitterControl(assetManager,"fpstemplate/effekts/flash/flash.efkefc");
+        // flash.setDriver(new EffekseerEmissionDriverGeneric().onDestruction((i)->{
+        //     target.removeControl(flash);
+        // }));
+        target.addControl(flash);
+
         return bullet;
 
+
     }
+
     PositionalSoundEmitterControl plasmaSound;
 
     public static enum Mode{
@@ -87,6 +109,8 @@ public class Jesse extends Node{
         BoundingBox bbox=(BoundingBox)jj.getWorldBound();
         jesse.attachChild(jj);
         jj.setLocalTranslation(0,bbox.getYExtent(),0);
+
+      
 
         if(mode==Mode.FirstPerson||mode==Mode.ThirdPerson){
             BetterCharacterControl characterControl = new BetterCharacterControl(bbox.getXExtent(), bbox.getYExtent()*2, 50f);
@@ -153,56 +177,79 @@ public class Jesse extends Node{
         });
         
 
+        LinearBlendSpace standWalkRunBlendSpace = new LinearBlendSpace(1, 10);
+        LinearBlendSpace standWalkRunJumpBlendSpace = new LinearBlendSpace(0, 1);
+        LinearBlendSpace aimShakeBlendSpace = new LinearBlendSpace(0, 1);
+
+        AnimComposer ac = jesse.getChild("Jesse").getControl(AnimComposer.class);
+        addControl(new AbstractControl() {
 
 
-        animComposers.forEach(c->{
-                SkinningControl skin=c.getSpatial().getControl(SkinningControl.class);
-                skin.setHardwareSkinningPreferred(true);
+            @Override
+            protected void controlUpdate(float tpf) {
+                BetterCharacterControl bc = getControl(BetterCharacterControl.class);
 
-                Armature armature=skin.getArmature();
-                
-                ArmatureMask mask=ArmatureMask.createMask(armature, "thigh.L");
-                mask.addFromJoint(armature,"thigh.R");
-                c.makeLayer("Legs",  mask);
+                if (bc != null) {
+              
 
-                c.makeLayer("RightArm",  ArmatureMask.createMask(armature, "shoulder.R"));
-                c.makeLayer("LeftArm",  ArmatureMask.createMask(armature, "shoulder.L"));
-                c.makeLayer("Body",  ArmatureMask.createMask(armature, "spine","chest"));
+                    float v = FastMath.clamp(bc.getRigidBody().getLinearVelocity().length(), 0, 14);
+                    aimShakeBlendSpace.setValue(v < 1 ? 0.01f : 1); // setting 0 looks buggy!
 
+                    v = FastMath.unInterpolateLinear(v, 0, 14);
+                    v = FastMath.interpolateLinear(v, 1, 10);
 
-                Supplier<Float> runBlend=()->{
-                    for(int i=0;i<getNumControls();i++){
-                        Control cc=getControl(i);
-                        if(cc instanceof BetterCharacterControl){
-                            BetterCharacterControl rb=(BetterCharacterControl)cc;
-                            float v= FastMath.clamp(rb.getRigidBody().getLinearVelocity().length(),0f,1f);;
-                            return v;
-                        }
+                    standWalkRunBlendSpace.setValue(v);
+                    ac.getAction("StandWalkRun").setSpeed(v);
+
+                    //walkRunBlendSpace.setValue(v);
+
+                    if(bc.isOnGround()) {
+                        standWalkRunJumpBlendSpace.setValue(0);
+                        ac.getAction("StandWalkRunJump").setSpeed(v);
+                    } else {
+                        standWalkRunJumpBlendSpace.setValue(1);
+                        ac.getAction("StandWalkRunJump").setSpeed(20);
                     }
-                    return 0f;
-                };
+                }
 
 
-                Supplier<Float> jumpBlend=()->{
-                    for(int i=0;i<getNumControls();i++){
-                        Control cc=getControl(i);
-                        if(cc instanceof BetterCharacterControl){
-                            BetterCharacterControl rb=(BetterCharacterControl)cc;
-                            return rb.isOnGround()?0f:1f;
-                        }
-                    }
-                    return 0f;
-                };
+            }
 
-               c.actionBlended("StandRun", new FunctionalBlendSpace(runBlend), "Stand","Run");
-            //    c.actionBlended("StandRunJump", new FunctionalBlendSpace(jumpBlend), "StandRun","Jump");
-               c.actionBlended("AimShake", new FunctionalBlendSpace(runBlend), "aim","shake");
-
-                c.setCurrentAction("StandRun", "Legs");
-                c.setCurrentAction("AimShake", "RightArm");
-
+            @Override
+            protected void controlRender(RenderManager rm, ViewPort vp) {
+            }
         });
 
+
+        SkinningControl skin = ac.getSpatial().getControl(SkinningControl.class);
+        skin.setHardwareSkinningPreferred(true);
+
+        Armature armature = skin.getArmature();
+
+        ArmatureMask legsMask = ArmatureMask.createMask(armature, "thigh.L");
+        legsMask.addFromJoint(armature, "thigh.R");
+        ac.makeLayer("Legs", legsMask);
+
+
+        ac.makeLayer("RightArm", ArmatureMask.createMask(armature, "shoulder.R"));
+        ac.makeLayer("LeftArm", ArmatureMask.createMask(armature, "shoulder.L"));
+        ac.makeLayer("Body", ArmatureMask.createMask(armature, "spine", "chest"));
+
+
+        blendActions(ac, "StandWalkRun", standWalkRunBlendSpace, "Stand", "Walk", "Run");
+        blendActions(ac, "StandWalkRunJump", standWalkRunJumpBlendSpace, "StandWalkRun","JumpMid");
+        blendActions(ac, "AimShake", aimShakeBlendSpace, "aim", "shake");
+
+        ac.setCurrentAction("StandWalkRunJump");//"Legs"
+        ac.setCurrentAction("AimShake", "RightArm");
+
+
+        // playAnim(1,JesseAnimations.Run,true);
+        // playAnim( 2,JesseAnimations.Crouch, true);
+        // playAnim( 0,JesseAnimations.shake, true);
+        // Spatial scam=jesse.getChild("camera");
+        // fpsCam.setLocation(scam.getWorldTranslation());
+        // fpsCam.setRotation(scam.getWorldRotation());
    
 
 
@@ -212,6 +259,24 @@ public class Jesse extends Node{
         // Spatial scam=jesse.getChild("camera");
         // fpsCam.setLocation(scam.getWorldTranslation());
         // fpsCam.setRotation(scam.getWorldRotation());         
+    }
+    public void blendActions(AnimComposer ac, String name, BlendSpace blendSpace, String... clips) {
+        BlendableAction[] acts = new BlendableAction[clips.length];
+        for (int i = 0; i < acts.length; i++) {
+            BlendableAction ba = (BlendableAction) ac.action(clips[i]);
+            acts[i] = ba;
+        }
+        BlendAction action = new BlendAction(blendSpace, acts) {
+            @Override
+            public void setMask(AnimationMask mask) {
+                super.setMask(mask);
+                for (Action action : actions) {
+                    action.setMask(mask);
+                }
+            }
+        };
+
+        ac.addAction(name, action);
     }
 
 
